@@ -82,6 +82,13 @@ export default function Login() {
           <h2 className="text-2xl font-bold text-zinc-900">เข้าสู่ระบบ</h2>
           <p className="mt-1 text-sm text-zinc-500">ยินดีต้อนรับกลับ! กรุณากรอกข้อมูลด้านล่าง</p>
 
+          {/*
+            WhatsApp OTP login is intentionally hidden from the UI pending Meta Business
+            Verification (required to create the `login_otp` authentication template).
+            The route /login/whatsapp, the WhatsAppLogin page, the /api/auth/wa/* endpoints,
+            and the OtpAttempt model are all still wired up — re-add the <Link> below to
+            expose it once Meta approves the business + auth template.
+          */}
           <button
             onClick={loginFb}
             disabled={loading}

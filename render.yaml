@@ -12,7 +12,10 @@ services:
     region: singapore
     plan: free
     rootDir: backend
-    buildCommand: npm ci && npm run build
+    # `--include=dev` is required: NODE_ENV=production (below) makes `npm ci` skip
+    # devDependencies by default — but the build needs TypeScript (a devDep) to compile.
+    # The runtime then runs from `dist/` so dev deps aren't needed at runtime.
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /health
     envVars:

@@ -31,7 +31,18 @@ export function isFbConfigured(): boolean {
   return Boolean(cfg.appId && cfg.appSecret);
 }
 
-/** Build the Facebook Login dialog URL — frontend redirects the user here. */
+/** Build the Facebook Login dialog URL — frontend redirects the user here.
+ *
+ * Scope set assumes the app owner has enabled these in App Review → Permissions and Features:
+ *   - `public_profile`          — name + id (always available)
+ *   - `email`                   — user's email address
+ *   - `pages_show_list`         — to list which pages the user manages
+ *   - `pages_messaging`         — to send Messenger messages from those pages
+ *   - `pages_read_engagement`   — to read page info (categories, follower count)
+ *
+ * `pages_manage_metadata` is intentionally NOT in this list — adding it would fail with
+ * Invalid Scopes until enabled. Webhook subscription is best-effort in oauth.routes.ts.
+ */
 export function buildLoginUrl(state: string): string {
   const cfg = fbConfig();
   const scope = [
@@ -39,7 +50,6 @@ export function buildLoginUrl(state: string): string {
     'email',
     'pages_show_list',
     'pages_messaging',
-    'pages_manage_metadata',
     'pages_read_engagement',
   ].join(',');
   const params = new URLSearchParams({

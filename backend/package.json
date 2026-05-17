@@ -9,7 +9,8 @@
     "start": "node dist/src/index.js",
     "typecheck": "tsc --noEmit",
     "seed": "tsx scripts/seed.ts",
-    "seed:prod": "node dist/scripts/seed.js"
+    "seed:prod": "node dist/scripts/seed.js",
+    "test:wa": "tsx scripts/test-whatsapp.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, Send, Facebook, Users, History, CreditCard, Settings, Inbox } from 'lucide-react';
 import { Logo } from '../Logo';
+import { FEATURES } from '../../lib/features';
 import clsx from 'clsx';
 
 const NAV = [
@@ -8,7 +9,7 @@ const NAV = [
   { to: '/inbox', label: 'กล่องข้อความ', icon: Inbox },
   { to: '/broadcast', label: 'ส่ง Broadcast', icon: Send },
   { to: '/history', label: 'ประวัติการส่ง', icon: History },
-  { to: '/pages', label: 'ช่องทาง / เพจ', icon: Facebook },
+  { to: '/pages', label: FEATURES.whatsapp ? 'ช่องทาง / เพจ' : 'จัดการเพจ', icon: Facebook },
   { to: '/customers', label: 'ลูกค้า / Tag', icon: Users },
   { to: '/subscription', label: 'แพ็กเกจของฉัน', icon: CreditCard },
   { to: '/settings', label: 'ตั้งค่า', icon: Settings },

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { mockApi } from '../api/mock';
+import { FEATURES } from '../lib/features';
 import type { Channel, ChatMessage, Conversation, FbPage, QuickReply } from '../types';
 import {
   AlertTriangle,
@@ -96,14 +97,19 @@ export default function Inbox() {
   const threadEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    mockApi.getPages().then(setPages);
+    mockApi.getPages().then((all) =>
+      setPages(FEATURES.whatsapp ? all : all.filter((p) => p.channel === 'facebook'))
+    );
     mockApi.getQuickReplies().then(setQuickReplies);
   }, []);
 
   useEffect(() => {
     const filter: { pageId?: string; channel?: Channel; status?: Conversation['status']; q?: string } = {};
     if (pageFilter) filter.pageId = pageFilter;
-    if (channelFilter !== 'all') filter.channel = channelFilter;
+    // When WhatsApp is disabled, force the channel filter to facebook server-side so
+    // WA conversations from the seed don't surface in the list.
+    const effectiveChannel: Channel | 'all' = FEATURES.whatsapp ? channelFilter : 'facebook';
+    if (effectiveChannel !== 'all') filter.channel = effectiveChannel;
     if (statusFilter !== 'all') filter.status = statusFilter;
     if (search) filter.q = search;
     mockApi.getConversations(filter).then((list) => {
@@ -183,40 +189,50 @@ export default function Inbox() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          {/* Channel tabs */}
-          <div className="mt-3 grid grid-cols-3 gap-1 rounded-xl bg-zinc-100 p-1">
-            {(['all', 'facebook', 'whatsapp'] as const).map((c) => {
-              const active = channelFilter === c;
-              return (
-                <button
-                  key={c}
-                  onClick={() => {
-                    setChannelFilter(c);
-                    setPageFilter('');
-                  }}
-                  className={clsx(
-                    'flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition',
-                    active ? 'bg-white text-zinc-900 shadow' : 'text-zinc-600 hover:text-zinc-900'
-                  )}
-                >
-                  {c === 'facebook' && <Facebook size={12} className="text-[#1877F2]" fill="#1877F2" />}
-                  {c === 'whatsapp' && (
-                    <span className="text-[#25D366]">
-                      <WhatsAppIcon size={12} />
-                    </span>
-                  )}
-                  {c === 'all' ? 'ทั้งหมด' : c === 'facebook' ? 'Facebook' : 'WhatsApp'}
-                </button>
-              );
-            })}
-          </div>
+          {/* Channel tabs (hidden when WhatsApp is disabled — only one channel remains). */}
+          {FEATURES.whatsapp && (
+            <div className="mt-3 grid grid-cols-3 gap-1 rounded-xl bg-zinc-100 p-1">
+              {(['all', 'facebook', 'whatsapp'] as const).map((c) => {
+                const active = channelFilter === c;
+                return (
+                  <button
+                    key={c}
+                    onClick={() => {
+                      setChannelFilter(c);
+                      setPageFilter('');
+                    }}
+                    className={clsx(
+                      'flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition',
+                      active ? 'bg-white text-zinc-900 shadow' : 'text-zinc-600 hover:text-zinc-900'
+                    )}
+                  >
+                    {c === 'facebook' && <Facebook size={12} className="text-[#1877F2]" fill="#1877F2" />}
+                    {c === 'whatsapp' && (
+                      <span className="text-[#25D366]">
+                        <WhatsAppIcon size={12} />
+                      </span>
+                    )}
+                    {c === 'all' ? 'ทั้งหมด' : c === 'facebook' ? 'Facebook' : 'WhatsApp'}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           <div className="mt-2 flex flex-wrap gap-1.5">
             <select
               className="rounded-lg border border-zinc-200 bg-white px-2 py-1 text-xs"
               value={pageFilter}
               onChange={(e) => setPageFilter(e.target.value)}
             >
-              <option value="">{channelFilter === 'whatsapp' ? 'ทุกเบอร์' : channelFilter === 'facebook' ? 'ทุกเพจ' : 'ทุกช่องทาง'}</option>
+              <option value="">
+                {!FEATURES.whatsapp
+                  ? 'ทุกเพจ'
+                  : channelFilter === 'whatsapp'
+                  ? 'ทุกเบอร์'
+                  : channelFilter === 'facebook'
+                  ? 'ทุกเพจ'
+                  : 'ทุกช่องทาง'}
+              </option>
               {pages
                 .filter((p) => channelFilter === 'all' || p.channel === channelFilter)
                 .map((p) => (

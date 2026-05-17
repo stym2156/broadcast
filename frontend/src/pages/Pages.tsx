@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { mockApi } from '../api/mock';
 import type { Channel, FbPage } from '../types';
-import { Facebook, Plus, Trash2, ExternalLink, AlertCircle, CheckCircle2, Phone } from 'lucide-react';
+import { Facebook, Plus, Trash2, ExternalLink, AlertCircle, CheckCircle2, Phone, ExternalLink as LinkIcon } from 'lucide-react';
 import { Modal } from '../components/Modal';
 import { Empty } from '../components/Empty';
+import { FEATURES } from '../lib/features';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 
@@ -15,15 +16,29 @@ const WhatsAppIcon = ({ size = 22 }: { size?: number }) => (
 
 type ChannelFilter = 'all' | Channel;
 
+interface WaForm {
+  name: string;
+  fbPageId: string;
+  accessToken: string;
+  waBusinessAccountId: string;
+  phoneNumber: string;
+}
+
+const EMPTY_WA: WaForm = { name: '', fbPageId: '', accessToken: '', waBusinessAccountId: '', phoneNumber: '' };
+
 export default function PagesPage() {
   const [pages, setPages] = useState<FbPage[]>([]);
   const [filter, setFilter] = useState<ChannelFilter>('all');
-  const [open, setOpen] = useState<Channel | null>(null);
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
+  const [waOpen, setWaOpen] = useState(false);
+  const [wa, setWa] = useState<WaForm>(EMPTY_WA);
+  const [waSubmitting, setWaSubmitting] = useState(false);
+  const [fbStarting, setFbStarting] = useState(false);
 
   useEffect(() => {
-    mockApi.getPages().then(setPages);
+    mockApi.getPages().then((all) => {
+      // When WhatsApp UI is disabled, never surface WA pages even if they exist in MongoDB.
+      setPages(FEATURES.whatsapp ? all : all.filter((p) => p.channel === 'facebook'));
+    });
   }, []);
 
   const filtered = useMemo(
@@ -39,18 +54,41 @@ export default function PagesPage() {
     [pages]
   );
 
-  async function add() {
-    if (!open || !name.trim()) return;
-    const p = await mockApi.addPage({
-      name: name.trim(),
-      channel: open,
-      phoneNumber: open === 'whatsapp' ? phone.trim() || undefined : undefined,
-    });
-    setPages((s) => [p, ...s]);
-    setName('');
-    setPhone('');
-    setOpen(null);
-    toast.success(open === 'whatsapp' ? 'เชื่อมเบอร์ WhatsApp Business สำเร็จ' : 'เชื่อมเพจ Facebook สำเร็จ');
+  async function connectFacebook() {
+    setFbStarting(true);
+    try {
+      const url = await mockApi.startFacebookOAuth();
+      window.location.href = url; // Facebook will redirect to /auth/facebook/callback
+    } catch (err) {
+      toast.error((err as Error).message);
+      setFbStarting(false);
+    }
+  }
+
+  async function submitWa() {
+    if (!wa.name.trim() || !wa.fbPageId.trim() || !wa.accessToken.trim()) {
+      toast.error('กรุณากรอก ชื่อ, Phone Number ID, และ Access Token');
+      return;
+    }
+    setWaSubmitting(true);
+    try {
+      const page = await mockApi.addPage({
+        name: wa.name.trim(),
+        channel: 'whatsapp',
+        fbPageId: wa.fbPageId.trim(),
+        accessToken: wa.accessToken.trim(),
+        waBusinessAccountId: wa.waBusinessAccountId.trim() || undefined,
+        phoneNumber: wa.phoneNumber.trim() || undefined,
+      });
+      setPages((s) => [page, ...s]);
+      setWa(EMPTY_WA);
+      setWaOpen(false);
+      toast.success('เชื่อม WhatsApp Business สำเร็จ');
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setWaSubmitting(false);
+    }
   }
 
   async function remove(id: string) {
@@ -64,54 +102,58 @@ export default function PagesPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-900">ช่องทางทั้งหมด</h1>
-          <p className="mt-1 text-sm text-zinc-500">เชื่อมเพจ Facebook และเบอร์ WhatsApp Business เพื่อรับ-ส่งข้อความใน Inbox เดียว</p>
+          <h1 className="text-2xl font-bold text-zinc-900">
+            {FEATURES.whatsapp ? 'ช่องทางทั้งหมด' : 'จัดการเพจ Facebook'}
+          </h1>
+          <p className="mt-1 text-sm text-zinc-500">
+            {FEATURES.whatsapp
+              ? 'เชื่อมเพจ Facebook ผ่าน OAuth และเบอร์ WhatsApp Business เพื่อรับ-ส่งข้อความใน Inbox เดียว'
+              : 'เชื่อมเพจ Facebook ของคุณเพื่อเริ่มส่ง broadcast ได้ไม่จำกัดจำนวนเพจ'}
+          </p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setOpen('facebook')} className="btn-outline">
-            <Facebook size={16} className="text-[#1877F2]" fill="#1877F2" /> เพิ่มเพจ Facebook
+          <button onClick={connectFacebook} disabled={fbStarting} className="btn-outline">
+            <Facebook size={16} className="text-[#1877F2]" fill="#1877F2" />
+            {fbStarting ? 'กำลังเปิด Facebook...' : 'เชื่อมเพจ Facebook'}
           </button>
-          <button onClick={() => setOpen('whatsapp')} className="btn-primary bg-[#25D366] hover:bg-[#1ebe5d]">
-            <WhatsAppIcon size={16} /> เพิ่ม WhatsApp
-          </button>
+          {FEATURES.whatsapp && (
+            <button onClick={() => setWaOpen(true)} className="btn-primary bg-[#25D366] hover:bg-[#1ebe5d]">
+              <WhatsAppIcon size={16} /> เพิ่ม WhatsApp
+            </button>
+          )}
         </div>
       </div>
 
-      <div className="card flex flex-wrap gap-1.5 p-1">
-        {(
-          [
+      {FEATURES.whatsapp && (
+        <div className="card flex flex-wrap gap-1.5 p-1">
+          {[
             { value: 'all' as const, label: `ทั้งหมด (${pages.length})` },
             { value: 'facebook' as const, label: `Facebook (${counts.facebook})` },
             { value: 'whatsapp' as const, label: `WhatsApp (${counts.whatsapp})` },
-          ]
-        ).map((opt) => (
-          <button
-            key={opt.value}
-            onClick={() => setFilter(opt.value)}
-            className={clsx(
-              'rounded-lg px-3 py-1.5 text-sm font-medium transition',
-              filter === opt.value ? 'bg-brand-600 text-white' : 'text-zinc-600 hover:bg-zinc-100'
-            )}
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
+          ].map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => setFilter(opt.value)}
+              className={clsx(
+                'rounded-lg px-3 py-1.5 text-sm font-medium transition',
+                filter === opt.value ? 'bg-brand-600 text-white' : 'text-zinc-600 hover:bg-zinc-100'
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {filtered.length === 0 ? (
         <Empty
           icon={Facebook}
-          title="ยังไม่ได้เชื่อมช่องทาง"
-          description="เริ่มต้นโดยเชื่อมเพจ Facebook หรือเบอร์ WhatsApp Business"
+          title="ยังไม่ได้เชื่อมเพจ"
+          description="เริ่มต้นโดยเชื่อมเพจ Facebook ของคุณ"
           action={
-            <div className="flex gap-2">
-              <button onClick={() => setOpen('facebook')} className="btn-outline">
-                <Plus size={14} /> Facebook
-              </button>
-              <button onClick={() => setOpen('whatsapp')} className="btn-primary bg-[#25D366] hover:bg-[#1ebe5d]">
-                <Plus size={14} /> WhatsApp
-              </button>
-            </div>
+            <button onClick={connectFacebook} className="btn-primary">
+              <Plus size={14} /> เชื่อมเพจ Facebook
+            </button>
           }
         />
       ) : (
@@ -134,7 +176,7 @@ export default function PagesPage() {
                     <p className="mt-0.5 text-xs text-zinc-500">
                       {isWa ? (
                         <span className="inline-flex items-center gap-1 font-mono">
-                          <Phone size={10} /> {p.phoneNumber ?? '-'}
+                          <Phone size={10} /> {p.phoneNumber ?? `ID: ${p.fbPageId}`}
                         </span>
                       ) : (
                         `Page ID: ${p.fbPageId}`
@@ -172,7 +214,9 @@ export default function PagesPage() {
                     <ExternalLink size={12} /> {isWa ? 'เปิด WhatsApp Manager' : 'เปิดเพจ'}
                   </button>
                   {p.status !== 'connected' && (
-                    <button className="btn-primary flex-1 py-1.5 text-xs">ต่ออายุ Token</button>
+                    <button onClick={isWa ? () => setWaOpen(true) : connectFacebook} className="btn-primary flex-1 py-1.5 text-xs">
+                      ต่ออายุ Token
+                    </button>
                   )}
                 </div>
               </div>
@@ -182,51 +226,89 @@ export default function PagesPage() {
       )}
 
       <Modal
-        open={open !== null}
-        onClose={() => setOpen(null)}
-        title={open === 'whatsapp' ? 'เชื่อม WhatsApp Business' : 'เชื่อมเพจ Facebook'}
+        open={waOpen}
+        onClose={() => setWaOpen(false)}
+        title="เชื่อม WhatsApp Business"
+        width="max-w-xl"
         footer={
           <>
-            <button className="btn-ghost" onClick={() => setOpen(null)}>ยกเลิก</button>
+            <button className="btn-ghost" onClick={() => setWaOpen(false)}>ยกเลิก</button>
             <button
-              className={clsx('btn-primary', open === 'whatsapp' && 'bg-[#25D366] hover:bg-[#1ebe5d]')}
-              onClick={add}
+              className="btn-primary bg-[#25D366] hover:bg-[#1ebe5d]"
+              onClick={submitWa}
+              disabled={waSubmitting}
             >
-              เชื่อม
+              {waSubmitting ? 'กำลังเชื่อม...' : 'เชื่อม'}
             </button>
           </>
         }
       >
-        <p className="mb-4 text-sm text-zinc-500">
-          {open === 'whatsapp'
-            ? 'ในระบบจริง จะให้คุณ login ด้วย Meta Business และเลือก WhatsApp Business Phone Number ที่ได้รับอนุมัติ สำหรับ demo ให้กรอกข้อมูล:'
-            : 'ในระบบจริง จะให้คุณ login ด้วย Facebook แล้วเลือกเพจที่ต้องการเชื่อม สำหรับ demo ให้กรอกชื่อเพจ:'}
-        </p>
+        <div className="mb-4 rounded-xl bg-emerald-50 px-4 py-3 text-xs text-emerald-800">
+          <strong>คัดข้อมูลจาก:</strong>{' '}
+          <a
+            href="https://developers.facebook.com/apps/"
+            target="_blank"
+            rel="noreferrer noopener"
+            className="inline-flex items-center gap-0.5 underline"
+          >
+            developers.facebook.com <LinkIcon size={10} />
+          </a>{' '}
+          → app ของคุณ → WhatsApp → API Setup
+        </div>
         <div className="space-y-3">
           <div>
-            <label className="label">{open === 'whatsapp' ? 'ชื่อบัญชี WhatsApp Business' : 'ชื่อเพจ'}</label>
+            <label className="label">ชื่อบัญชี (สำหรับแสดงในระบบ) *</label>
             <input
               className="input"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={open === 'whatsapp' ? 'เช่น ร้านของฉัน WA' : 'เช่น ร้านของฉัน'}
+              value={wa.name}
+              onChange={(e) => setWa({ ...wa, name: e.target.value })}
+              placeholder="เช่น ร้านของฉัน WA"
               autoFocus
             />
           </div>
-          {open === 'whatsapp' && (
+          <div>
+            <label className="label">Phone Number ID *</label>
+            <input
+              className="input font-mono text-sm"
+              value={wa.fbPageId}
+              onChange={(e) => setWa({ ...wa, fbPageId: e.target.value })}
+              placeholder="เช่น 1084134061453287"
+            />
+            <p className="mt-1 text-xs text-zinc-400">15-16 หลัก เห็นในส่วน "From" ของ API Setup</p>
+          </div>
+          <div>
+            <label className="label">Access Token *</label>
+            <textarea
+              className="input font-mono text-xs leading-relaxed"
+              rows={3}
+              value={wa.accessToken}
+              onChange={(e) => setWa({ ...wa, accessToken: e.target.value })}
+              placeholder="EAAW..."
+            />
+            <p className="mt-1 text-xs text-zinc-400">
+              Temporary token ใช้ได้ 24 ชม. — สำหรับ production ใช้ System User Permanent Token
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="label">เบอร์โทรศัพท์ (รูปแบบ +66...)</label>
+              <label className="label">WhatsApp Business Account ID</label>
               <input
-                className="input font-mono"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="+66 2 555 0000"
+                className="input font-mono text-sm"
+                value={wa.waBusinessAccountId}
+                onChange={(e) => setWa({ ...wa, waBusinessAccountId: e.target.value })}
+                placeholder="เช่น 1955294095110334"
               />
-              <p className="mt-1 text-xs text-zinc-400">
-                เบอร์ต้องผ่านการอนุมัติจาก Meta Business Manager และผูกกับ WhatsApp Business API แล้ว
-              </p>
             </div>
-          )}
+            <div>
+              <label className="label">เบอร์โทรสำหรับแสดง</label>
+              <input
+                className="input"
+                value={wa.phoneNumber}
+                onChange={(e) => setWa({ ...wa, phoneNumber: e.target.value })}
+                placeholder="+1 555 645 1551"
+              />
+            </div>
+          </div>
         </div>
       </Modal>
     </div>

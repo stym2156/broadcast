@@ -4,6 +4,9 @@ import { useAuth } from './store/auth';
 import { DashboardLayout } from './components/layout/DashboardLayout';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
+import FacebookCallback from './pages/auth/FacebookCallback';
+import WhatsAppLogin from './pages/auth/WhatsAppLogin';
+import ConnectPages from './pages/ConnectPages';
 import Dashboard from './pages/Dashboard';
 import Inbox from './pages/Inbox';
 import Broadcast from './pages/Broadcast';
@@ -30,6 +33,16 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/auth/facebook/callback" element={<FacebookCallback />} />
+      <Route path="/login/whatsapp" element={<WhatsAppLogin />} />
+      <Route
+        path="/connect-pages"
+        element={
+          <Protected>
+            <ConnectPages />
+          </Protected>
+        }
+      />
       <Route
         element={
           <Protected>

@@ -83,9 +83,40 @@ export const mockApi = {
     return data.pages;
   },
 
-  async addPage(input: { name: string; channel: FbPage['channel']; phoneNumber?: string }): Promise<FbPage> {
+  async addPage(input: {
+    name: string;
+    channel: FbPage['channel'];
+    /** For WhatsApp: the actual Phone Number ID from Meta API Setup. */
+    fbPageId?: string;
+    phoneNumber?: string;
+    accessToken?: string;
+    waBusinessAccountId?: string;
+  }): Promise<FbPage> {
     const { data } = await api.post<{ ok: boolean; page: FbPage }>('/pages', input);
     return data.page;
+  },
+
+  /** Kicks off Facebook OAuth — returns the dialog URL the caller should navigate to. */
+  async startFacebookOAuth(): Promise<string> {
+    const { data } = await api.get<{ ok: boolean; url: string }>('/oauth/facebook/start');
+    if (!data.url) throw new Error('Facebook OAuth not configured');
+    return data.url;
+  },
+
+  // ───────────────────────── WhatsApp OTP login ─────────────────────────
+
+  async sendWaOtp(phone: string): Promise<{ sentVia: 'template' | 'free-form' }> {
+    const { data } = await api.post<{ ok: boolean; sentVia: 'template' | 'free-form' }>(
+      '/auth/wa/send-otp',
+      { phone }
+    );
+    return { sentVia: data.sentVia };
+  },
+
+  async verifyWaOtp(phone: string, code: string) {
+    const { data } = await api.post<AuthResponse>('/auth/wa/verify', { phone, code });
+    persistAuth(data.token, data.user);
+    return { user: data.user, token: data.token };
   },
 
   async removePage(id: string): Promise<void> {
