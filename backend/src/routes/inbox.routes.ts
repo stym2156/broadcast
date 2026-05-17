@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { Conversation } from '../models/Conversation';
 import { Message } from '../models/Message';
-import { Page } from '../models/Page';
 import { QuickReply } from '../models/QuickReply';
 import { authRequired, type AuthedRequest } from '../middleware/auth';
 import { HttpError } from '../middleware/error';
@@ -240,5 +239,3 @@ inboxRouter.delete('/quick-replies/:id', async (req: AuthedRequest, res, next) =
   }
 });
 
-// Reference Page model so the import isn't unused even if no route currently needs it.
-void Page;

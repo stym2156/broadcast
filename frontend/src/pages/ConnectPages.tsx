@@ -25,24 +25,22 @@ export default function ConnectPages() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const token = sessionStorage.getItem('fb_access_token');
-    if (!token) {
-      nav('/login', { replace: true });
-      return;
-    }
+    // The backend looks up the user's stored Facebook access token from their User document
+    // and calls Graph API on their behalf — the browser never sees the FB token.
     (async () => {
       try {
-        const { data } = await api.post<{ ok: boolean; pages: ManagedPage[] }>('/oauth/facebook/pages', {
-          fbAccessToken: token,
-        });
+        const { data } = await api.get<{ ok: boolean; pages: ManagedPage[] }>('/oauth/facebook/pages');
         setPages(data.pages);
       } catch (err) {
-        setError((err as Error).message);
+        const msg =
+          (err as { response?: { data?: { error?: string } } }).response?.data?.error ??
+          (err as Error).message;
+        setError(msg);
       } finally {
         setLoading(false);
       }
     })();
-  }, [nav]);
+  }, []);
 
   async function connect(page: ManagedPage) {
     setConnecting(page.id);
@@ -62,7 +60,6 @@ export default function ConnectPages() {
   }
 
   function finish() {
-    sessionStorage.removeItem('fb_access_token');
     nav('/dashboard', { replace: true });
   }
 

@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit",
     "seed": "tsx scripts/seed.ts",
     "seed:prod": "node dist/scripts/seed.js",
-    "test:wa": "tsx scripts/test-whatsapp.ts"
+    "test:wa": "tsx scripts/test-whatsapp.ts",
+    "fix:phone-index": "tsx scripts/fix-phone-index.ts",
+    "fix:phone-index:prod": "node dist/scripts/fix-phone-index.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

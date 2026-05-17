@@ -67,10 +67,6 @@ authRouter.get('/me', authRequired, async (req: AuthedRequest, res, next) => {
   }
 });
 
-authRouter.post('/facebook', async (_req, res) => {
-  res.json({ ok: false, error: 'Facebook OAuth not implemented in this scaffold' });
-});
-
 // ───────────────────────── WhatsApp OTP login ─────────────────────────
 
 const sendOtpSchema = z.object({ phone: z.string().min(8).max(20) });

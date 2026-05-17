@@ -37,16 +37,15 @@ export default function FacebookCallback() {
 
     (async () => {
       try {
-        const { data } = await api.post<{
-          ok: boolean;
-          token: string;
-          user: User;
-          fbAccessToken: string;
-        }>('/oauth/facebook/callback', { code });
+        const { data } = await api.post<{ ok: boolean; token: string; user: User }>(
+          '/oauth/facebook/callback',
+          { code }
+        );
         localStorage.setItem('bc_token', data.token);
         localStorage.setItem('bc_user', JSON.stringify(data.user));
-        // Stash the FB access token so the next screen can list the user's managed pages.
-        sessionStorage.setItem('fb_access_token', data.fbAccessToken);
+        // The user's long-lived FB access token is kept server-side — the next page
+        // (/connect-pages) authenticates with our JWT and the backend looks up the
+        // FB token from the User document. No FB token ever lives in the browser.
         setUser(data.user);
         nav('/connect-pages', { replace: true });
       } catch (err) {

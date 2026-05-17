@@ -9,7 +9,11 @@ pageRouter.use(authRequired);
 
 pageRouter.get('/', async (req: AuthedRequest, res, next) => {
   try {
-    const pages = await Page.find({ owner: req.userId }).sort({ createdAt: -1 });
+    // Strip access tokens — they're server-only secrets used to call the Graph API.
+    // The frontend never needs them; exposing them would let any browser tab impersonate the page.
+    const pages = await Page.find({ owner: req.userId })
+      .select('-accessToken')
+      .sort({ createdAt: -1 });
     res.json({ ok: true, pages });
   } catch (e) {
     next(e);
@@ -28,7 +32,7 @@ const createPageSchema = z.object({
 pageRouter.post('/', async (req: AuthedRequest, res, next) => {
   try {
     const data = createPageSchema.parse(req.body);
-    const page = await Page.create({
+    const created = await Page.create({
       owner: req.userId,
       channel: data.channel,
       fbPageId: data.fbPageId ?? String(Math.floor(Math.random() * 1_000_000_000)),
@@ -37,6 +41,8 @@ pageRouter.post('/', async (req: AuthedRequest, res, next) => {
       accessToken: data.accessToken ?? null,
       waBusinessAccountId: data.waBusinessAccountId ?? null,
     });
+    // Re-fetch with accessToken stripped — never echo a token back to the browser.
+    const page = await Page.findById(created._id).select('-accessToken');
     res.json({ ok: true, page });
   } catch (e) {
     next(e);

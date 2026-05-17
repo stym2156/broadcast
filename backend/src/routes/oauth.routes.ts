@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
+import { z } from 'zod';
 import {
   buildLoginUrl,
   exchangeCodeForToken,
@@ -11,10 +13,13 @@ import {
 import { User } from '../models/User';
 import { Page } from '../models/Page';
 import { signToken } from '../utils/jwt';
+import { HttpError } from '../middleware/error';
 import { authRequired, type AuthedRequest } from '../middleware/auth';
-import crypto from 'crypto';
 
 export const oauthRouter = Router();
+
+/** Long-lived user tokens last ~60 days. Track expiry conservatively at 55. */
+const FB_USER_TOKEN_VALIDITY_DAYS = 55;
 
 /**
  * Step 1: redirect the user to Facebook Login. We embed a CSRF `state` so the callback
@@ -31,13 +36,15 @@ oauthRouter.get('/facebook/start', (_req, res) => {
 
 /**
  * Step 2: frontend forwards the `code` from `?code=...` back here.
- * We exchange it for a long-lived user token, upsert the user, and return our JWT.
+ * We exchange it for a long-lived user token, upsert the user, and persist the token
+ * SERVER-SIDE on the user document. The token is intentionally NOT returned to the
+ * browser — exposing it would let any script on the page impersonate the user.
  */
 oauthRouter.post('/facebook/callback', async (req, res, next) => {
   try {
     const code = String(req.body.code ?? '');
-    if (!code) return res.status(400).json({ ok: false, error: 'Missing code' });
-    if (!isFbConfigured()) return res.status(503).json({ ok: false, error: 'Facebook not configured' });
+    if (!code) throw new HttpError(400, 'Missing code');
+    if (!isFbConfigured()) throw new HttpError(503, 'Facebook not configured');
 
     const { longLived } = await exchangeCodeForToken(code);
     const me = await getMe(longLived);
@@ -55,16 +62,16 @@ oauthRouter.post('/facebook/callback', async (req, res, next) => {
       });
     } else if (!user.facebookId) {
       user.facebookId = me.id;
-      await user.save();
     }
+    user.fbUserAccessToken = longLived;
+    user.fbUserAccessTokenExpiresAt = new Date(Date.now() + FB_USER_TOKEN_VALIDITY_DAYS * 86_400_000);
+    await user.save();
 
     const token = signToken({ sub: String(user._id), role: user.role as 'user' | 'admin' });
     res.json({
       ok: true,
       token,
       user: { id: String(user._id), email: user.email, name: user.name, role: user.role },
-      /** Frontend can immediately call /api/oauth/facebook/pages with this token to import pages. */
-      fbAccessToken: longLived,
     });
   } catch (e) {
     next(e);
@@ -72,26 +79,36 @@ oauthRouter.post('/facebook/callback', async (req, res, next) => {
 });
 
 /**
- * Step 3 (after login): user picks which managed pages to connect.
- * Frontend passes the user's `fbAccessToken` back in the body.
+ * Step 3 (after login): list the user's managed Facebook pages.
+ * Uses the server-side `fbUserAccessToken` stored during the callback — the browser
+ * never sees or transmits it.
  */
-oauthRouter.post('/facebook/pages', authRequired, async (req: AuthedRequest, res, next) => {
+oauthRouter.get('/facebook/pages', authRequired, async (req: AuthedRequest, res, next) => {
   try {
-    const fbAccessToken = String(req.body.fbAccessToken ?? '');
-    if (!fbAccessToken) return res.status(400).json({ ok: false, error: 'Missing fbAccessToken' });
-    const pages = await listManagedPages(fbAccessToken);
+    const user = await User.findById(req.userId).select('+fbUserAccessToken fbUserAccessTokenExpiresAt');
+    if (!user?.fbUserAccessToken) throw new HttpError(400, 'No Facebook session — re-authenticate');
+    if (user.fbUserAccessTokenExpiresAt && user.fbUserAccessTokenExpiresAt.getTime() < Date.now()) {
+      throw new HttpError(401, 'Facebook session expired — re-authenticate');
+    }
+    const pages = await listManagedPages(user.fbUserAccessToken);
     res.json({ ok: true, pages });
   } catch (e) {
     next(e);
   }
 });
 
+const connectPageSchema = z.object({
+  pageId: z.string().min(1),
+  name: z.string().min(1),
+  /** Page access token returned from listManagedPages — we trust it because the user is authenticated. */
+  accessToken: z.string().min(1),
+});
+
 oauthRouter.post('/facebook/pages/connect', authRequired, async (req: AuthedRequest, res, next) => {
   try {
-    const { pageId, name, accessToken } = req.body as { pageId: string; name: string; accessToken: string };
-    if (!pageId || !accessToken) return res.status(400).json({ ok: false, error: 'Missing fields' });
+    const { pageId, name, accessToken } = connectPageSchema.parse(req.body);
 
-    const page = await Page.findOneAndUpdate(
+    const created = await Page.findOneAndUpdate(
       { owner: req.userId, channel: 'facebook', fbPageId: pageId },
       {
         $set: { name, accessToken, status: 'connected' },
@@ -107,6 +124,8 @@ oauthRouter.post('/facebook/pages/connect', authRequired, async (req: AuthedRequ
       console.warn('[oauth] webhook subscribe failed for', pageId, err);
     }
 
+    // Strip the page access token from the response — kept server-side only.
+    const page = await Page.findById(created._id).select('-accessToken');
     res.json({ ok: true, page });
   } catch (e) {
     next(e);

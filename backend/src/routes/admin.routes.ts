@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { User } from '../models/User';
 import { Page } from '../models/Page';
 import { Broadcast } from '../models/Broadcast';
@@ -112,9 +113,26 @@ adminRouter.get('/users', async (_req, res, next) => {
   }
 });
 
+/**
+ * Strict allow-list for admin-editable user fields. Notably absent:
+ *   - `role` — promoting users to admin via a generic PATCH would be a privilege escalation path.
+ *     Role changes belong in a separate, more deliberate endpoint with audit logging.
+ *   - `passwordHash`, `email`, `phone`, `facebookId` — identity fields, not casually editable.
+ *   - `fbUserAccessToken` — security-sensitive, server-controlled only.
+ */
+const patchUserSchema = z
+  .object({
+    name: z.string().min(1).max(200).optional(),
+    status: z.enum(['active', 'suspended']).optional(),
+    avatar: z.string().url().nullable().optional(),
+  })
+  .strict();
+
 adminRouter.patch('/users/:id', async (req, res, next) => {
   try {
-    const user = await User.findByIdAndUpdate(req.params.id, req.body, { new: true }).select('-passwordHash');
+    const patch = patchUserSchema.parse(req.body);
+    const user = await User.findByIdAndUpdate(req.params.id, patch, { new: true, runValidators: true })
+      .select('-passwordHash');
     res.json({ ok: true, user });
   } catch (e) {
     next(e);

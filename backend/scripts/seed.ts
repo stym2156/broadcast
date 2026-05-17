@@ -68,14 +68,20 @@ async function upsertUser(email: string, name: string, plainPassword: string, ro
 }
 
 async function seedDemoUserData(userId: mongoose.Types.ObjectId) {
-  // Clear previous demo data for clean re-seed (only for the demo user — doesn't touch real users).
+  // Clear previous demo data for a clean re-seed — STRICTLY scoped to the demo user
+  // so running this against a populated production DB cannot wipe real users' data.
+  //
+  // Order matters: collect conversation IDs BEFORE deleting conversations, so we can
+  // target the right Message documents (Message has no `owner` of its own — it inherits
+  // ownership through `conversation -> owner`).
+  const demoConvIds = await Conversation.find({ owner: userId }).distinct('_id');
+  await Message.deleteMany({ conversation: { $in: demoConvIds } });
   await Page.deleteMany({ owner: userId });
   await Customer.deleteMany({ owner: userId });
   await Conversation.deleteMany({ owner: userId });
   await Broadcast.deleteMany({ owner: userId });
   await Subscription.deleteMany({ user: userId });
   await QuickReply.deleteMany({ owner: userId });
-  await Message.deleteMany({}); // messages are referenced by conversation, so we can wipe all
 
   const pages = await Page.insertMany([
     { owner: userId, channel: 'facebook', fbPageId: '102938475', name: 'ร้านเสื้อผ้าแฟชั่น Lulu', subscribersCount: 18430, status: 'connected' },
