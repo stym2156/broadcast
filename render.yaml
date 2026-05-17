@@ -21,8 +21,9 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 4000
+      # PORT is auto-set by Render — DO NOT override here. Render's proxy expects the
+      # service to listen on Render's assigned port (usually 10000 on free plans).
+      # Our app reads process.env.PORT and falls back to 4000 for local dev only.
       - key: JWT_EXPIRES_IN
         value: 7d
       - key: FB_VERIFY_TOKEN

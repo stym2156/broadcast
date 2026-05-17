@@ -10,8 +10,10 @@ async function start() {
     console.error('[mongo] connection failed — starting API anyway for dev:', err);
   }
 
-  app.listen(env.PORT, () => {
-    console.log(`[api] listening on http://localhost:${env.PORT}`);
+  // Bind to 0.0.0.0 explicitly — required for Render's proxy to reach the container.
+  // (Express default usually does this, but being explicit prevents surprises.)
+  app.listen(env.PORT, '0.0.0.0', () => {
+    console.log(`[api] listening on 0.0.0.0:${env.PORT}`);
   });
 }
 
