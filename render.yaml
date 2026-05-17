@@ -1,0 +1,50 @@
+# Render Blueprint — push this repo to GitHub then "New Blueprint" on render.com
+# pointing at it to provision the backend service in one click.
+#
+# All sensitive vars (MONGODB_URI, JWT_SECRET, Meta tokens) MUST be set manually in the
+# Render dashboard — they are intentionally marked `sync: false` so they aren't read from
+# this committed file.
+
+services:
+  - type: web
+    name: broadcast-api
+    env: node
+    region: singapore
+    plan: free
+    rootDir: backend
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: FB_VERIFY_TOKEN
+        value: broadcast_verify_2026
+      - key: WA_VERIFY_TOKEN
+        value: broadcast_wa_2026
+
+      # Set these in the Render dashboard (never commit secrets):
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: CLIENT_ORIGIN
+        sync: false # e.g. https://broadcast.vercel.app
+      - key: ADMIN_ORIGIN
+        sync: false # e.g. https://broadcast-admin.vercel.app
+      - key: FB_APP_ID
+        sync: false
+      - key: FB_APP_SECRET
+        sync: false
+      - key: FB_OAUTH_REDIRECT
+        sync: false # e.g. https://broadcast.vercel.app/auth/facebook/callback
+      - key: WA_PHONE_NUMBER_ID
+        sync: false
+      - key: WA_BUSINESS_ACCOUNT_ID
+        sync: false
+      - key: WA_ACCESS_TOKEN
+        sync: false
