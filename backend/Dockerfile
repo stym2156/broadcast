@@ -15,7 +15,8 @@ RUN npm run build
 FROM node:20-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
-ENV PORT=4000
+# PORT is intentionally NOT set here — Render injects its own PORT (usually 10000).
+# Local Docker runs can pass `-e PORT=4000` or rely on the app's 4000 fallback.
 
 # Production-only deps to keep the image small.
 COPY package*.json ./

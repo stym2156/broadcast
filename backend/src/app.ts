@@ -16,9 +16,16 @@ import { errorHandler } from './middleware/error';
 
 export const app = express();
 
+// Allow every origin from CLIENT_ORIGINS + ADMIN_ORIGINS (each may be a comma-separated
+// list, e.g. production URL + Vercel preview URL). Requests with no Origin header (curl,
+// server-to-server) are allowed unconditionally — CORS only matters for browsers.
+const allowedOrigins = new Set<string>([...env.CLIENT_ORIGINS, ...env.ADMIN_ORIGINS]);
 app.use(
   cors({
-    origin: [env.CLIENT_ORIGIN, env.ADMIN_ORIGIN],
+    origin(origin, cb) {
+      if (!origin || allowedOrigins.has(origin)) return cb(null, true);
+      cb(new Error(`CORS: origin ${origin} not allowed`));
+    },
     credentials: true,
   })
 );

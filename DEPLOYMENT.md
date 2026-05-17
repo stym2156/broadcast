@@ -123,11 +123,34 @@ Render จะ restart auto
 
 | อาการ | สาเหตุ | แก้ |
 |---|---|---|
-| `CORS error` ใน browser console | `CLIENT_ORIGIN`/`ADMIN_ORIGIN` บน Render ผิด | อัปเดตให้ตรง Vercel URL → Render auto-restart |
-| Backend health check fail | MongoDB Atlas ไม่ allow IP | Network Access → Add `0.0.0.0/0` |
+| `ERR_CONNECTION_RESET` ตอนเปิด API URL แม้ Render โชว์ "Live" | มี `PORT` env var ใน dashboard ค่าว่างเปล่า → app bind port 0 (random) → Render proxy หา port ไม่เจอ | Environment → ลบ row `PORT` ทั้งแถว (ไม่ใช่แค่ลบค่า) → Save Changes → Render จะ inject PORT=10000 เอง |
+| Render redeploy วน loop "New primary port detected: ..." | เหมือนข้างบน — app bind port 0 ทำให้ Node สุ่ม port ทุก restart | แก้แบบเดียวกัน — ลบ `PORT` row |
+| Backend start แต่ทุก API call ค้าง/timeout | `MONGODB_URI` ไม่ได้ set บน Render → ใช้ fallback `127.0.0.1` | Environment → กรอก `MONGODB_URI` → Save Changes (โค้ดใหม่จะ crash boot ถ้า missing แทนที่จะเงียบ) |
+| Boot fail `[env] Missing required env var MONGODB_URI in production` | ลืมตั้ง env var ใน Render dashboard | ตั้งให้ครบตาม Step 2 ตาราง |
+| `CORS error` ใน browser console | `CLIENT_ORIGIN`/`ADMIN_ORIGIN` บน Render ไม่ตรง Vercel URL | อัปเดตให้ตรง — รองรับหลาย URL ด้วย comma เช่น `https://app.vercel.app,https://app-preview-xxx.vercel.app` |
+| Backend health check fail บน Render | MongoDB Atlas ไม่ allow IP ของ Render | Atlas → Network Access → Add `0.0.0.0/0` (allow all) |
 | Login บอก "Invalid credentials" | ยังไม่ seed prod DB | Render Shell → `npm run seed:prod` |
-| Render service spin down | Free plan sleep หลัง 15 min | ปกติ — รอ ~30 วินาที |
-| WhatsApp ส่งไม่ได้ | recipient number ไม่ได้ add ในรายการ test | Meta WhatsApp panel → Phone numbers → Add recipient |
+| Render service spin down | Free plan sleep หลัง 15 min | ปกติ — request แรกจะช้า ~30 วินาที |
+| WhatsApp ส่งไม่ได้ | recipient number ไม่ได้ add ใน test list | Meta WhatsApp panel → Phone numbers → Add recipient |
+| Frontend ขึ้น `Failed to fetch` ทุก API call | `VITE_API_URL` บน Vercel ผิด หรือยังเป็น `http://localhost:4000/api` | Vercel → project → Settings → Environment Variables → แก้ค่า → Redeploy (Vercel ต้อง build ใหม่ทั้ง process — แค่ save ไม่พอ) |
+
+### Render Environment Variables — checklist
+
+ทุก row ต้องมีค่า ห้ามว่าง (ค่าว่าง = ใส่ empty string ทำให้ proxy ผิดพลาด ดูแถวบน):
+
+| Key | ใส่ค่าอะไร |
+|---|---|
+| `NODE_ENV` | `production` (Render auto-inject แต่ถ้าไม่เห็นให้ใส่เอง) |
+| ⚠️ `PORT` | **อย่าใส่!** ห้ามมี row นี้ — Render จัดการเอง |
+| `MONGODB_URI` | full Atlas URI ต้องเริ่ม `mongodb+srv://` |
+| `JWT_SECRET` | random hex 64 ตัว (รัน `openssl rand -hex 32`) |
+| `JWT_EXPIRES_IN` | `7d` |
+| `CLIENT_ORIGIN` | Vercel URL ของ frontend (https://...) — รองรับ comma-separated |
+| `ADMIN_ORIGIN` | Vercel URL ของ admin |
+| `FB_APP_ID` / `FB_APP_SECRET` | จาก Meta dashboard (ถ้าใช้ FB) |
+| `FB_VERIFY_TOKEN` | string อะไรก็ได้ — ต้องตรงกับใน Meta webhook config |
+| `WA_PHONE_NUMBER_ID` / `WA_BUSINESS_ACCOUNT_ID` / `WA_ACCESS_TOKEN` | จาก Meta WhatsApp API Setup |
+| `WA_VERIFY_TOKEN` | string อะไรก็ได้ — ต้องตรงกับใน Meta webhook config |
 
 ---
 
