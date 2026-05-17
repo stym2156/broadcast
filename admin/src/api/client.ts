@@ -2,7 +2,10 @@ import axios from 'axios';
 
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api',
-  timeout: 15_000,
+  // Render free-tier services sleep after 15 min of inactivity; first request after
+  // wakeup can take 30-60s. 60s lets the cold start complete without the user seeing
+  // a misleading "timeout" error.
+  timeout: 60_000,
 });
 
 api.interceptors.request.use((config) => {
