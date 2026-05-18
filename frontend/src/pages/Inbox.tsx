@@ -103,32 +103,70 @@ export default function Inbox() {
     mockApi.getQuickReplies().then(setQuickReplies);
   }, []);
 
+  /**
+   * Poll the conversation list every 5 seconds so new inbound messages from webhooks
+   * appear without needing to refresh the page. Pauses when the tab is hidden so a
+   * minimized window doesn't burn API quota all day.
+   */
   useEffect(() => {
     const filter: { pageId?: string; channel?: Channel; status?: Conversation['status']; q?: string } = {};
     if (pageFilter) filter.pageId = pageFilter;
-    // When WhatsApp is disabled, force the channel filter to facebook server-side so
-    // WA conversations from the seed don't surface in the list.
     const effectiveChannel: Channel | 'all' = FEATURES.whatsapp ? channelFilter : 'facebook';
     if (effectiveChannel !== 'all') filter.channel = effectiveChannel;
     if (statusFilter !== 'all') filter.status = statusFilter;
     if (search) filter.q = search;
-    mockApi.getConversations(filter).then((list) => {
-      setConversations(list);
-      if (!activeId && list.length > 0) setActiveId(list[0].id);
-    });
-  }, [channelFilter, pageFilter, statusFilter, search, activeId]);
 
+    let cancelled = false;
+    const fetchList = async () => {
+      const list = await mockApi.getConversations(filter);
+      if (cancelled) return;
+      setConversations(list);
+      // Auto-select the first conversation only on the very first load — subsequent polls
+      // must not steal focus from whatever conversation the user is currently reading.
+      setActiveId((current) => current ?? list[0]?.id ?? null);
+    };
+
+    fetchList();
+    const id = window.setInterval(() => {
+      if (document.visibilityState === 'visible') fetchList();
+    }, 5_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+    // activeId is intentionally NOT in the dep list — polling shouldn't restart every
+    // time the user opens a different conversation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channelFilter, pageFilter, statusFilter, search]);
+
+  /** Poll the active conversation's messages every 5 seconds for the same reason. */
   useEffect(() => {
     if (!activeId) {
       setMessages([]);
       return;
     }
-    setLoadingThread(true);
-    mockApi.getMessages(activeId).then((msgs) => {
+    let cancelled = false;
+    let firstLoad = true;
+    const fetchMessages = async () => {
+      if (firstLoad) setLoadingThread(true);
+      const msgs = await mockApi.getMessages(activeId);
+      if (cancelled) return;
       setMessages(msgs);
-      setLoadingThread(false);
+      if (firstLoad) {
+        setLoadingThread(false);
+        firstLoad = false;
+      }
       setConversations((prev) => prev.map((c) => (c.id === activeId ? { ...c, unreadCount: 0 } : c)));
-    });
+    };
+
+    fetchMessages();
+    const id = window.setInterval(() => {
+      if (document.visibilityState === 'visible') fetchMessages();
+    }, 5_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
   }, [activeId]);
 
   useEffect(() => {
