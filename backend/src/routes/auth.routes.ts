@@ -67,6 +67,59 @@ authRouter.get('/me', authRequired, async (req: AuthedRequest, res, next) => {
   }
 });
 
+const updateProfileSchema = z
+  .object({
+    name: z.string().min(1).max(200).optional(),
+    email: z.string().email().max(200).optional(),
+  })
+  .strict();
+
+/**
+ * Update the authenticated user's profile. Strict schema: only `name` and `email` may
+ * be changed here. Sensitive fields (role, passwordHash, phone, facebookId,
+ * fbUserAccessToken, status) are explicitly NOT allowed — they have dedicated flows
+ * (admin endpoints, password change, OAuth, OTP, etc.).
+ */
+authRouter.patch('/me', authRequired, async (req: AuthedRequest, res, next) => {
+  try {
+    const data = updateProfileSchema.parse(req.body);
+    if (data.email) {
+      const taken = await User.findOne({ email: data.email.toLowerCase(), _id: { $ne: req.userId } });
+      if (taken) throw new HttpError(409, 'อีเมลนี้มีผู้ใช้แล้ว');
+    }
+    const user = await User.findByIdAndUpdate(req.userId, data, { new: true, runValidators: true })
+      .select('-passwordHash');
+    if (!user) throw new HttpError(404, 'User not found');
+    res.json({ ok: true, user });
+  } catch (e) {
+    next(e);
+  }
+});
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(6).max(200),
+});
+
+/**
+ * Change password. Requires the current password (so a stolen JWT alone can't lock the
+ * real owner out). The new password is bcrypted before storage.
+ */
+authRouter.post('/me/password', authRequired, async (req: AuthedRequest, res, next) => {
+  try {
+    const data = changePasswordSchema.parse(req.body);
+    const user = await User.findById(req.userId);
+    if (!user) throw new HttpError(404, 'User not found');
+    const ok = await bcrypt.compare(data.currentPassword, user.passwordHash);
+    if (!ok) throw new HttpError(401, 'รหัสผ่านปัจจุบันไม่ถูกต้อง');
+    user.passwordHash = await bcrypt.hash(data.newPassword, 10);
+    await user.save();
+    res.json({ ok: true });
+  } catch (e) {
+    next(e);
+  }
+});
+
 // ───────────────────────── WhatsApp OTP login ─────────────────────────
 
 const sendOtpSchema = z.object({ phone: z.string().min(8).max(20) });

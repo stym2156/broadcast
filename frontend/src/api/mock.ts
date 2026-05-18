@@ -76,6 +76,17 @@ export const mockApi = {
     return raw ? (JSON.parse(raw) as User) : null;
   },
 
+  async updateProfile(input: { name?: string; email?: string }): Promise<User> {
+    const { data } = await api.patch<{ ok: boolean; user: User }>('/auth/me', input);
+    // Keep localStorage in sync so a page refresh shows the new name/email without a re-login.
+    localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+    return data.user;
+  },
+
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    await api.post('/auth/me/password', { currentPassword, newPassword });
+  },
+
   // ───────────────────────── Pages / Channels ─────────────────────────
 
   async getPages(): Promise<FbPage[]> {
