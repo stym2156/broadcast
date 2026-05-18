@@ -140,6 +140,10 @@ export const mockApi = {
     return data.broadcasts;
   },
 
+  async deleteBroadcast(id: string): Promise<void> {
+    await api.delete(`/broadcasts/${id}`);
+  },
+
   async createBroadcast(input: {
     title: string;
     message: string;

@@ -126,9 +126,16 @@ async function runBroadcast(broadcastId: string): Promise<void> {
       failed++;
     }
 
-    // Persist progress every 10 sends so the UI's polling shows movement.
+    // Persist progress every 10 sends + check if the user has cancelled (deleted) the
+    // broadcast while it was in flight. If the record is gone, stop immediately so we
+    // don't keep spamming customers after the operator hit "หยุดและลบ".
     if ((sent + failed) % 10 === 0) {
       await Broadcast.updateOne({ _id: broadcastId }, { sentCount: sent, failedCount: failed });
+      const stillExists = await Broadcast.exists({ _id: broadcastId });
+      if (!stillExists) {
+        console.log(`[broadcast] ${broadcastId} cancelled mid-send — sent ${sent}, failed ${failed}`);
+        return;
+      }
     }
   }
 
@@ -241,7 +248,16 @@ broadcastRouter.get('/:id', async (req: AuthedRequest, res, next) => {
 
 broadcastRouter.delete('/:id', async (req: AuthedRequest, res, next) => {
   try {
-    await Broadcast.deleteOne({ _id: req.params.id, owner: req.userId });
+    const bc = await Broadcast.findOne({ _id: req.params.id, owner: req.userId });
+    if (!bc) throw new HttpError(404, 'Broadcast not found');
+    // Completed broadcasts represent messages that real recipients already received.
+    // Deleting them would erase the audit trail; refuse the request.
+    if (bc.status === 'completed') {
+      throw new HttpError(409, 'ลบไม่ได้ — broadcast ที่ส่งสำเร็จแล้วเก็บเป็นประวัติ');
+    }
+    await Broadcast.deleteOne({ _id: bc._id });
+    // The in-process worker (if any) will hit "broadcast not found" on its next
+    // checkpoint and stop gracefully — see runBroadcast.
     res.json({ ok: true });
   } catch (e) {
     next(e);
